@@ -25,7 +25,7 @@ extern "C" fn _start_rust() -> ! {
         let blink_count_1 = tester(&mut test1);
         blink_fast(blink_count_1);
 
-        delay_long();6
+        delay_long();
 
         let blink_count_2 = tester(&mut test2);
         blink_fast(blink_count_2);
