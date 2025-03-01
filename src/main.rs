@@ -7,6 +7,7 @@ use peripherals::{
     gpio::{self, FunctionSelect, set_pin},
     mini_uart,
 };
+
 use utils::delay::loop_delay;
 mod peripherals;
 mod utils;
@@ -21,6 +22,10 @@ fn panic(_i: &PanicInfo) -> ! {
     loop {}
 }
 
+unsafe extern "C" {
+    pub fn get_el() -> u64;
+}
+
 #[unsafe(no_mangle)]
 extern "C" fn _start_rust() -> ! {
     gpio::set_function_select(21, FunctionSelect::Output);
@@ -28,8 +33,13 @@ extern "C" fn _start_rust() -> ! {
     let mut pin_state: bool = true;
     loop {
         set_pin(21, pin_state);
-        loop_delay(10000000);
+        loop_delay(20000000);
 
+        unsafe {
+            let el = get_el(); // Supongamos que devuelve 1, 2, 3, etc.
+            let el_ascii = (el as u8) + b'0'; // Convierte el número a su dígito ASCII correspondiente
+            mini_uart::mini_uart_send(el_ascii);
+        }
         pin_state = !pin_state;
         mini_uart::mini_uart_send(b'H');
         mini_uart::mini_uart_send(b'E');

@@ -1,36 +1,52 @@
 BUILD_DIR      := build
 RUST_SRC       := src
-ASM_SRC        := src_boot
+ASM_SRC        := src_asm
+C_SRC          := src_c
 
-# Variables de configuración
 TARGET         := aarch64-unknown-none
 KERNEL_NAME    := kernel
 KERNEL_ELF     := target/$(TARGET)/release/$(KERNEL_NAME)
-KERNEL_BIN     := kernel8.img
+KERNEL_BIN     := binary/kernel8.img
 LINKER_SCRIPT  := linker.ld
-BOOT_ASM       := $(ASM_SRC)/boot.S
-BOOT_OBJ       := $(BUILD_DIR)/boot.o
 
-# Comandos (ajusta estos si tus herramientas tienen otro nombre o ruta)
+# Buscar recursivamente todos los archivos assembly y C.
+ASM_SRCS       := $(shell find $(ASM_SRC) -name '*.S')
+C_SRCS         := $(shell find $(C_SRC) -name '*.c')
+
+# Generar la ruta de objetos, preservando la estructura relativa.
+ASM_OBJS       := $(patsubst $(ASM_SRC)/%.S, $(BUILD_DIR)/%.o, $(ASM_SRCS))
+C_OBJS         := $(patsubst $(C_SRC)/%.c, $(BUILD_DIR)/%.o, $(C_SRCS))
+
+OBJS           := $(ASM_OBJS) $(C_OBJS)
+
 AS             := aarch64-none-elf-as
+CC             := aarch64-none-elf-gcc
 OBJCOPY        := rust-objcopy
 CARGO          := cargo
 
-# Los flags de Rust (además de los ya definidos en .cargo/config.toml)
-# Se añade el objeto boot.o al proceso de linkeo.
-RUSTFLAGS_EXTRA := -C link-arg=$(BOOT_OBJ)
+# Se agregan los objetos como argumentos de linkeo.
+RUSTFLAGS_EXTRA := $(foreach obj, $(OBJS), -C link-arg=$(obj))
 
 .PHONY: all clean
 
 all: $(KERNEL_BIN)
 
-# Compilar el ensamblador a objeto.
-$(BOOT_OBJ): $(BOOT_ASM)
+# Regla para crear el directorio build (aunque cada regla también crea su directorio intermedio)
+$(BUILD_DIR):
+	mkdir -p $(BUILD_DIR)
+
+# Regla genérica para compilar archivos assembly (.S) recursivamente.
+$(BUILD_DIR)/%.o: $(ASM_SRC)/%.S
+	@mkdir -p $(dir $@)
 	$(AS) -o $@ $<
 
-# Compilar el proyecto Rust en modo release.
-# Se asume que en .cargo/config.toml ya está configurado el linker (con el linker script).
-$(KERNEL_ELF): $(BOOT_OBJ)
+# Regla genérica para compilar archivos C (.c) recursivamente.
+$(BUILD_DIR)/%.o: $(C_SRC)/%.c
+	@mkdir -p $(dir $@)
+	$(CC) -c $< -o $@
+
+# Compilar el proyecto Rust en modo release, pasando los objetos extra.
+$(KERNEL_ELF): $(OBJS)
 	$(CARGO) rustc --release --target=$(TARGET) -- $(RUSTFLAGS_EXTRA)
 
 # Generar la imagen binaria final a partir del ELF.
@@ -39,4 +55,4 @@ $(KERNEL_BIN): $(KERNEL_ELF)
 
 clean:
 	$(CARGO) clean
-	rm -f $(BOOT_OBJ) $(KERNEL_BIN)
+	rm -rf $(BUILD_DIR) $(KERNEL_BIN)
