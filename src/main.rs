@@ -3,6 +3,7 @@
 
 use core::panic::PanicInfo;
 
+use irq::init::enable_mini_uart_irq;
 use peripherals::{
     gpio::{self, FunctionSelect, set_pin},
     mini_uart,
@@ -35,6 +36,8 @@ extern "C" fn _start_rust() -> ! {
 
     mini_uart::mini_uart_send(b'\n');
     mini_uart::mini_uart_send(b'\r');
+
+    enable_mini_uart_irq();
 
     loop {
         mini_uart::mini_uart_send(b'H');

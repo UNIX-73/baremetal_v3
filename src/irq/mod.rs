@@ -1,5 +1,7 @@
 use crate::peripherals::mini_uart::mini_uart_send;
 
+pub mod init;
+
 #[unsafe(no_mangle)]
 pub extern "C" fn show_invalid_entry_message() {
     mini_uart_send(b'I');
