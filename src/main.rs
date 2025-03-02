@@ -9,6 +9,7 @@ use peripherals::{
 };
 
 use utils::delay::loop_delay;
+mod irq;
 mod peripherals;
 mod utils;
 

@@ -43,12 +43,12 @@ $(BUILD_DIR):
 # Regla genérica para compilar archivos assembly (.S) recursivamente.
 $(BUILD_DIR)/%.o: $(ASM_SRC)/%.S
 	@mkdir -p $(dir $@)
-	$(AS) -o $@ $<
+	$(CC) -c -x assembler-with-cpp -Iinclude $< -o $@
 
 # Regla genérica para compilar archivos C (.c) recursivamente.
 $(BUILD_DIR)/%.o: $(C_SRC)/%.c
 	@mkdir -p $(dir $@)
-	$(CC) -c $< -o $@
+	$(CC) -c -Iinclude/** $< -o $@
 
 # Compilar el proyecto Rust en modo release, pasando los objetos extra.
 $(KERNEL_ELF): $(OBJS)
@@ -58,40 +58,3 @@ $(KERNEL_ELF): $(OBJS)
 $(KERNEL_BIN): $(KERNEL_ELF)
 	$(OBJCOPY) --strip-all -O binary $< $@
 
-
-ARMSTUB_DIR    := armstub
-ARMSTUB_SRC    := $(ARMSTUB_DIR)/src
-ARMSTUB_BUILD  := $(ARMSTUB_DIR)/build
-ARMSTUB_BIN    := $(ARMSTUB_DIR)/binary
-
-AS             := aarch64-none-elf-as
-LD             := aarch64-none-elf-ld
-OBJCOPY        := aarch64-none-elf-objcopy
-
-# Buscar archivos .S dentro de armstub/src
-ARMSTUB_SRCS   := $(shell find $(ARMSTUB_SRC) -name '*.S')
-# Generar las rutas de los objetos .o correspondientes
-ARMSTUB_OBJS   := $(patsubst $(ARMSTUB_SRC)/%.S, $(ARMSTUB_BUILD)/%.o, $(ARMSTUB_SRCS))
-
-# Reglas para crear directorios si no existen
-$(ARMSTUB_BUILD):
-	mkdir -p $(ARMSTUB_BUILD)
-
-$(ARMSTUB_BIN):
-	mkdir -p $(ARMSTUB_BIN)
-
-# Regla para compilar archivos assembly en armstub
-$(ARMSTUB_BUILD)/%.o: $(ARMSTUB_SRC)/%.S | $(ARMSTUB_BUILD)
-	@mkdir -p $(dir $@)
-	$(AS) -o $@ $<
-
-# Regla para enlazar los objetos y generar el ELF
-$(ARMSTUB_BIN)/armstub.elf: $(ARMSTUB_OBJS) | $(ARMSTUB_BIN)
-	$(LD) --section-start=.text=0 -o $@ $(ARMSTUB_OBJS)
-
-# Regla para convertir el ELF en un binario plano
-$(ARMSTUB_BIN)/armstub-new.bin: $(ARMSTUB_BIN)/armstub.elf
-	$(OBJCOPY) -O binary $< $@
-
-# Objetivo principal de armstub
-armstub: $(ARMSTUB_BIN)/armstub-new.bin
