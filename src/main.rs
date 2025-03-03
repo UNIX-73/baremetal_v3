@@ -3,14 +3,12 @@
 
 use core::panic::PanicInfo;
 
-use irq::init::enable_mini_uart_irq;
-use peripherals::{
-    gpio::{self, FunctionSelect, set_pin},
-    mini_uart,
-};
+use kernel_apps::kernel_apps_manager::KERNEL_APPS_MANAGER;
+use peripherals::gpio::{self, FunctionSelect, set_pin};
 
 use utils::delay::loop_delay;
 mod irq;
+mod kernel_apps;
 mod peripherals;
 mod utils;
 
@@ -31,31 +29,25 @@ unsafe extern "C" {
 #[unsafe(no_mangle)]
 extern "C" fn _start_rust() -> ! {
     gpio::set_function_select(21, FunctionSelect::Output);
-    mini_uart::mini_uart_init();
-    let mut pin_state: bool = true;
 
-    mini_uart::mini_uart_send(b'\n');
-    mini_uart::mini_uart_send(b'\r');
+    set_pin(21, true);
+    loop_delay(20000000);
+    KERNEL_APPS_MANAGER.lock(|m| {
+        m.handle_event_system_start();
+        let el = unsafe { get_el() }; // Supongamos que devuelve 1, 2, 3, etc.
+        let el_ascii = (el as u8) + b'0'; // Convierte el número a su dígito ASCII correspondiente
+        m.core().uart().tx().b_send_string("EL=");
+        m.core().uart().tx().b_send_char(el_ascii);
+        m.core()
+            .uart()
+            .tx()
+            .b_send_string("\n\rHello from rust!\n\r");
 
-    enable_mini_uart_irq();
-
-    loop {
-        mini_uart::mini_uart_send(b'H');
-        mini_uart::mini_uart_send(b'E');
-        mini_uart::mini_uart_send(b'L');
-        mini_uart::mini_uart_send(b'L');
-        mini_uart::mini_uart_send(b'O');
-        mini_uart::mini_uart_send(b'\n');
-        mini_uart::mini_uart_send(b'\r');
-        unsafe {
-            let el = get_el(); // Supongamos que devuelve 1, 2, 3, etc.
-            let el_ascii = (el as u8) + b'0'; // Convierte el número a su dígito ASCII correspondiente
-            mini_uart::mini_uart_send(el_ascii);
+        loop {
+            m.handle_event_start();
+            m.handle_event_loop();
         }
-        mini_uart::mini_uart_send(b'-');
+    });
 
-        set_pin(21, pin_state);
-        loop_delay(20000000);
-        pin_state = !pin_state;
-    }
+    loop {}
 }
