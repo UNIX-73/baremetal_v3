@@ -11,6 +11,7 @@ use crate::{
         },
         gpio::{self, FunctionSelect},
     },
+    utils::circular_array::CircularArray,
 };
 
 use super::CoreKernelApp;

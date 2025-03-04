@@ -27,6 +27,10 @@ impl<'a> KernelAppManager<'a> {
         self.core.handle_event_system_start();
     }
 
+    pub fn handle_event_system_loop(&mut self) {
+        self.core.handle_event_system_loop();
+    }
+
     pub fn handle_event_start(&mut self) {
         for i in 0..KERNEL_APPS_SIZE {
             match self.apps[i].as_mut() {

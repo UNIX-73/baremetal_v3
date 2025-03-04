@@ -26,3 +26,19 @@ impl CoreUartTx {
         }
     }
 }
+
+pub mod global_send {
+    use crate::kernel_apps::kernel_apps_manager::KERNEL_APPS_MANAGER;
+
+    pub fn send_string(msg: &str) {
+        KERNEL_APPS_MANAGER.lock(|m| {
+            m.core().uart.tx.b_send_string(msg);
+        })
+    }
+
+    pub fn send_char(char: u8) {
+        KERNEL_APPS_MANAGER.lock(|m| {
+            m.core().uart.tx.b_send_char(char);
+        })
+    }
+}

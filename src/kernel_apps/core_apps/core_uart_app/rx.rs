@@ -1,47 +1,39 @@
-const MINI_UART_RX_BUFFER_SIZE: usize = 1024;
+use crate::{
+    kernel_apps::kernel_apps_manager::KERNEL_APPS_MANAGER, utils::circular_array::CircularArray,
+};
 
+pub const MINI_UART_RX_BUFFER_SIZE: usize = 1024;
 pub struct CoreUartRx {
-    buffer: [u8; MINI_UART_RX_BUFFER_SIZE],
-    buffer_idx: usize,
+    buffer: CircularArray<u8, MINI_UART_RX_BUFFER_SIZE>,
 }
-
 impl CoreUartRx {
     pub const fn new() -> Self {
         CoreUartRx {
-            buffer: [0u8; MINI_UART_RX_BUFFER_SIZE],
-            buffer_idx: 0,
+            buffer: CircularArray {
+                buffer: [0; MINI_UART_RX_BUFFER_SIZE],
+                current_write_idx: 0,
+                overfilled: false,
+            },
         }
     }
 
-    pub fn get_last_data(&mut self) -> u8 {
-        self.buffer[self.buffer_idx]
+    pub fn notify_core_apps(new_data: u8) {
+        KERNEL_APPS_MANAGER.lock(|m| {
+            m.core().uart_terminal.handle_mini_uart_rx_irq(new_data);
+        })
     }
 
-    pub fn get_data(
-        &mut self,
-        data_buffer: &mut [u8; MINI_UART_RX_BUFFER_SIZE],
-        mut length: usize,
-    ) {
-        if length > MINI_UART_RX_BUFFER_SIZE {
-            length = MINI_UART_RX_BUFFER_SIZE;
-        }
-
-        let b_idx: usize = self.buffer_idx;
-
-        todo!("implementar la función");
+    pub fn get_buffer(&self) -> &CircularArray<u8, MINI_UART_RX_BUFFER_SIZE> {
+        &self.buffer
     }
 }
 
 pub mod rx_irq {
-    use super::{CoreUartRx, MINI_UART_RX_BUFFER_SIZE};
+    use super::CoreUartRx;
 
     pub fn handle_irq_mini_uart_irq_rx(rx: &mut CoreUartRx, data: u8) {
-        rx.buffer[rx.buffer_idx] = data;
+        rx.buffer.push(data);
 
-        rx.buffer_idx += 1;
-
-        if rx.buffer_idx >= MINI_UART_RX_BUFFER_SIZE {
-            rx.buffer_idx = 0;
-        }
+        CoreUartRx::notify_core_apps(data);
     }
 }

@@ -44,6 +44,7 @@ extern "C" fn _start_rust() -> ! {
             .b_send_string("\n\rHello from rust!\n\r");
 
         loop {
+            m.handle_event_system_loop();
             m.handle_event_start();
             m.handle_event_loop();
         }
