@@ -1,4 +1,4 @@
-use crate::peripherals::aux::{AUX_BASE, AUX_MU_IO_REG_OFFSET, AUX_MU_LSR_REG_OFFSET};
+use crate::peripherals::auxiliar::{AUX_BASE, AUX_MU_IO_REG_OFFSET, AUX_MU_LSR_REG_OFFSET};
 
 pub struct CoreUartTx {}
 

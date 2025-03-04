@@ -4,7 +4,7 @@ use tx::CoreUartTx;
 use crate::{
     irq::init::{IrqEnableComponent, irq_enable_component},
     peripherals::{
-        aux::{
+        auxiliar::{
             AUX_BASE, AUX_ENABLES_OFFSET, AUX_MU_BAUD_REG_OFFSET, AUX_MU_CNTL_REG_OFFSET,
             AUX_MU_IER_REG_OFFSET, AUX_MU_IIR_REG_OFFSET, AUX_MU_LCR_REG_OFFSET,
             AUX_MU_MCR_REG_OFFSET,

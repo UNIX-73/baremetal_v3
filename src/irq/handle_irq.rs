@@ -3,7 +3,7 @@ use crate::{
         core_apps::{CoreKernelApp, core_uart_app::rx::rx_irq::handle_irq_mini_uart_irq_rx},
         kernel_apps_manager::KERNEL_APPS_MANAGER,
     },
-    peripherals::aux::{
+    peripherals::auxiliar::{
         AUX_BASE, AUX_MU_IER_REG_OFFSET, AUX_MU_IIR_REG_OFFSET, AUX_MU_IO_REG_OFFSET,
     },
 };
