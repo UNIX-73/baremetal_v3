@@ -6,8 +6,8 @@ use crate::{
     kernel_apps::kernel_apps_manager::KERNEL_APPS_MANAGER, utils::string::ascii::AsciiChar,
 };
 
-pub const MAX_TERMINAL_WORDS: usize = 32;
-pub const MAX_TERMINAL_WORD_CHARS: usize = 64;
+pub const IRQ_DATA_SIZE: usize = 32;
+pub const TERMINAL_BUFFER_SIZE: usize = 64;
 
 use super::{
     CoreKernelApp,
@@ -20,15 +20,43 @@ use super::{
 pub struct CoreUartTerminalApp {
     command_start: usize, // Índice para el buffer de comandos
     run_command: bool,    // Indica si el comando está en ejecución
+
+    irq_data_idx: usize,
+    irq_data: [u8; IRQ_DATA_SIZE], //la data que llega desde el irq se gestiona en el loop, no en el irq
 }
 
 impl CoreKernelApp for CoreUartTerminalApp {
     fn event_system_loop(&mut self) {
+        if self.hanfle_clean_buffer(false) {
+            return; // Si es true se ha llenado el buffer, se elimina y gestiona sólo
+        }
+
         if self.run_command {
             send_string("\n\r");
             self.run_command();
             self.run_command = false;
             self.command_start = 0;
+            self.irq_data_idx = 0;
+
+            return;
+        }
+
+        if self.irq_data_idx != 0 {
+            if self.irq_data_idx >= IRQ_DATA_SIZE {
+                self.hanfle_clean_buffer(true);
+                send_string("IRQ buffer was filled between interrupts\n\r");
+
+                return;
+            }
+
+            // Aquí se gestiona que se reenvíe al usuario la data que ha llegado
+            let arrived_data = &self.irq_data[0..self.irq_data_idx];
+
+            for i in arrived_data {
+                send_char(*i);
+            }
+
+            self.irq_data_idx = 0;
         }
     }
 }
@@ -38,6 +66,9 @@ impl CoreUartTerminalApp {
         CoreUartTerminalApp {
             command_start: 0,   // Iniciar el índice en 0
             run_command: false, // No ejecutar ningún comando al principio
+
+            irq_data_idx: 0,
+            irq_data: [0; IRQ_DATA_SIZE],
         }
     }
 
@@ -45,33 +76,43 @@ impl CoreUartTerminalApp {
         // Si el dato recibido es un salto de línea (Enter)
         if new_data == b'\r' || new_data == b'\n' {
             self.run_command = true;
+
             return; // Salir de la función una vez que se detecte un comando
+        } else {
+            self.irq_data[self.irq_data_idx] = new_data; //añadimos la data para gestionarse en el loop
+            self.irq_data_idx += 1;
         }
 
         // Si no se ha iniciado un comando, enviamos el dato recibido
         if !self.run_command {
-            send_char(new_data);
-
             // Incrementamos el índice del buffer de comandos
             self.command_start += 1;
-
-            // Si el buffer se ha llenado, comenzamos a borrar el contenido
-            if self.command_start >= MINI_UART_RX_BUFFER_SIZE {
-                self.command_start = 0;
-
-                // Enviar secuencias para borrar el contenido del buffer
-                for _ in 0..MINI_UART_RX_BUFFER_SIZE {
-                    send_char(AsciiChar::Backspace.to_byte()); // Mover el cursor hacia atrás
-                    send_char(AsciiChar::Space.to_byte()); // Sobrescribir con un espacio
-                    send_char(AsciiChar::Backspace.to_byte()); // Volver a mover el cursor hacia atrás
-                }
-
-                // Enviar mensaje indicando que el buffer está lleno
-                send_string("[Command Terminal] Buffer filled!\n\r");
-
-                return; // Salir después de manejar el buffer lleno
-            }
         }
+    }
+
+    fn hanfle_clean_buffer(&mut self, force_clean: bool) -> bool {
+        if self.command_start >= MINI_UART_RX_BUFFER_SIZE || force_clean {
+            // Enviar secuencias para borrar el contenido del buffer
+            for _ in 0..self.command_start {
+                send_char(AsciiChar::Backspace.to_byte()); // Mover el cursor hacia atrás
+                send_char(AsciiChar::Space.to_byte()); // Sobrescribir con un espacio
+                send_char(AsciiChar::Backspace.to_byte()); // Volver a mover el cursor hacia atrás
+            }
+
+            // Enviar mensaje indicando que el buffer está lleno
+            if !force_clean {
+                send_string("[Command Terminal] Buffer filled!\n\r");
+            } else {
+                send_string("Buffer was cleaned!!\n\r");
+            }
+
+            self.run_command = false;
+            self.command_start = 0;
+            self.irq_data_idx = 0;
+
+            return true; // Salir después de manejar el buffer lleno
+        }
+        return false;
     }
 
     /**
@@ -120,4 +161,6 @@ impl CoreUartTerminalApp {
     fn throw_terminal_error(&self, error: u32) {
         send_string("\n\rdefault terminal error\n\r");
     }
+
+    fn handle_send_chars(&mut self, data: u8) {}
 }
