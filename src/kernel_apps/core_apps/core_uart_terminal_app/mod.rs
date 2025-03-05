@@ -1,7 +1,6 @@
 pub mod commands;
-use core::ascii;
 
-use commands::TerminalCommand;
+use commands::{Command, CommandResult};
 
 use crate::{
     kernel_apps::kernel_apps_manager::KERNEL_APPS_MANAGER, utils::string::ascii::AsciiChar,
@@ -26,7 +25,10 @@ pub struct CoreUartTerminalApp {
 impl CoreKernelApp for CoreUartTerminalApp {
     fn event_system_loop(&mut self) {
         if self.run_command {
+            send_string("\n\r");
             self.run_command();
+            self.run_command = false;
+            self.command_start = 0;
         }
     }
 }
@@ -38,6 +40,7 @@ impl CoreUartTerminalApp {
             run_command: false, // No ejecutar ningún comando al principio
         }
     }
+
     pub fn handle_mini_uart_rx_irq(&mut self, new_data: u8) {
         // Si el dato recibido es un salto de línea (Enter)
         if new_data == b'\r' || new_data == b'\n' {
@@ -64,47 +67,55 @@ impl CoreUartTerminalApp {
                 }
 
                 // Enviar mensaje indicando que el buffer está lleno
-                send_string("\n[Command Terminal] Buffer filled!");
+                send_string("[Command Terminal] Buffer filled!\n\r");
 
                 return; // Salir después de manejar el buffer lleno
             }
         }
     }
 
+    /**
+     * LLamado desde el system loop si se ha establecido en las interrupciones que se ha intentado mandar un comando
+     */
     fn run_command(&mut self) {
-        let mut valid_command: bool = true;
-        let mut command: TerminalCommand;
+        let mut command_result: CommandResult = CommandResult::UnknownCommand;
 
-        KERNEL_APPS_MANAGER.lock(|m| {
-            let rx = m.core().uart().rx().get_buffer();
-            let data = rx.normalized();
-            let command_data = &data[self.command_start..MINI_UART_RX_BUFFER_SIZE];
-
-            let mut command_chars: [u8; MAX_TERMINAL_WORD_CHARS] =
-                [AsciiChar::Null.to_byte(); MAX_TERMINAL_WORD_CHARS];
-
-            for i in 0..MAX_TERMINAL_WORD_CHARS {
-                if command_data[i] != AsciiChar::Space.to_byte() {
-                    command_chars[i] = command_data[i];
-                }
-
-                ascii::Char::
-
-                match TerminalCommand::get_command(&command_chars[..i + 1]) {
-                    TerminalCommand::Null => continue,
-                    TerminalCommand::Test => {}
-                    TerminalCommand::Test2 => {}
-                }
-            }
+        let buffer: [u8; 1024] = KERNEL_APPS_MANAGER.lock(|m| {
+            let rx = m.core().uart().rx();
+            return rx.get_buffer().normalized(); //Normalizamos el buffer circular
         });
 
-        if valid_command {}
+        let command_bytes =
+            &buffer[MINI_UART_RX_BUFFER_SIZE - self.command_start - 1..MINI_UART_RX_BUFFER_SIZE];
 
-        self.command_start = 0;
-        self.run_command = false;
+        let command_len = command_bytes.len();
+
+        for idx in 0..command_len {
+            if command_bytes[idx] == AsciiChar::Space.to_byte() || idx + 1 == command_len {
+                // Se suma 1 por el espacio que se sabe que hay entre el comando y los params
+                command_result =
+                    Command::run_command(&command_bytes[..idx], &command_bytes[idx + 1..]);
+
+                break;
+            }
+        }
+
+        // Result
+        match command_result {
+            CommandResult::Ok => {}
+            CommandResult::Error(e) => {
+                send_string("[CommandError] ");
+                send_string(e);
+            }
+            CommandResult::UnknownCommand => {
+                send_string("Unknown command\n\r");
+            }
+            CommandResult::InvalidBytes => {
+                send_string("Invalid bytes\n\r");
+            }
+            CommandResult::CommandHandledResult => {}
+        };
     }
-
-    fn handle_command(command: [[u8; MAX_TERMINAL_WORD_CHARS]; MAX_TERMINAL_WORDS]) {}
 
     fn throw_terminal_error(&self, error: u32) {
         send_string("\n\rdefault terminal error\n\r");

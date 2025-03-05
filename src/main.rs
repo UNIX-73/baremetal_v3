@@ -3,7 +3,10 @@
 
 use core::panic::PanicInfo;
 
-use kernel_apps::kernel_apps_manager::KERNEL_APPS_MANAGER;
+use kernel_apps::{
+    core_apps::core_uart_app::tx::global_send::send_string,
+    kernel_apps_manager::KERNEL_APPS_MANAGER,
+};
 use peripherals::gpio::{self, FunctionSelect, set_pin};
 
 use utils::delay::loop_delay;
@@ -49,6 +52,5 @@ extern "C" fn _start_rust() -> ! {
             m.handle_event_loop();
         }
     });
-
     loop {}
 }
