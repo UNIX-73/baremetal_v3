@@ -15,7 +15,7 @@ impl CommandList {
     }
 
     pub fn test2(args: &str) -> CommandResult {
-        if args.len() != 0 {
+        if args.len() == 0 {
             send_string("ran test2\n\r");
 
             CommandResult::Ok

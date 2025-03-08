@@ -1,5 +1,5 @@
+pub mod clear;
 pub mod test;
-
 pub struct CommandList;
 
 type CommandFunction = fn(&str) -> CommandResult;
@@ -41,4 +41,6 @@ impl Command {
 pub static TERMINAL_COMMAND_LIST: &[Command] = &[
     Command("test", CommandList::test),
     Command("test2", CommandList::test2),
+    Command("clear", CommandList::clear),
+    Command("cls", CommandList::clear),
 ];

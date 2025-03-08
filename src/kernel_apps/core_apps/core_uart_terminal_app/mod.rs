@@ -1,13 +1,9 @@
 pub mod commands;
-
-use commands::{Command, CommandResult};
-
 use crate::{
     kernel_apps::kernel_apps_manager::KERNEL_APPS_MANAGER, utils::string::ascii::AsciiChar,
 };
-
-pub const IRQ_DATA_SIZE: usize = 32;
-pub const TERMINAL_BUFFER_SIZE: usize = 64;
+use commands::{Command, CommandResult};
+pub const TERMINAL_BUFFER_SIZE: usize = MINI_UART_RX_BUFFER_SIZE;
 
 use super::{
     CoreKernelApp,
@@ -18,45 +14,26 @@ use super::{
 };
 
 pub struct CoreUartTerminalApp {
-    command_start: usize, // Índice para el buffer de comandos
-    run_command: bool,    // Indica si el comando está en ejecución
-
-    irq_data_idx: usize,
-    irq_data: [u8; IRQ_DATA_SIZE], //la data que llega desde el irq se gestiona en el loop, no en el irq
+    run_command: bool,                   // Indica si se debe ejecutar el comando
+    terminal_buffer_arrived_data: usize, // Cantidad de bytes nuevos sin procesar
+    terminal_buffer_idx: usize,          // Cantidad total de bytes válidos en el buffer
+    terminal_buffer: [u8; TERMINAL_BUFFER_SIZE], // Buffer de datos recibidos
 }
 
 impl CoreKernelApp for CoreUartTerminalApp {
     fn event_system_loop(&mut self) {
-        if self.hanfle_clean_buffer(false) {
-            return; // Si es true se ha llenado el buffer, se elimina y gestiona sólo
-        }
-
-        if self.run_command {
-            send_string("\n\r");
+        // Si se llenó el buffer o se solicita limpieza, se limpia y se retorna
+        if self.handle_clean_buffer(false) {
+            return;
+        } else if self.run_command {
             self.run_command();
-            self.run_command = false;
-            self.command_start = 0;
-            self.irq_data_idx = 0;
-
+            self.clear_buffer();
             return;
         }
 
-        if self.irq_data_idx != 0 {
-            if self.irq_data_idx >= IRQ_DATA_SIZE {
-                self.hanfle_clean_buffer(true);
-                send_string("IRQ buffer was filled between interrupts\n\r");
-
-                return;
-            }
-
-            // Aquí se gestiona que se reenvíe al usuario la data que ha llegado
-            let arrived_data = &self.irq_data[0..self.irq_data_idx];
-
-            for i in arrived_data {
-                send_char(*i);
-            }
-
-            self.irq_data_idx = 0;
+        // Si hay datos nuevos por procesar, se envían (se imprimen)
+        if self.terminal_buffer_arrived_data > 0 {
+            self.handle_send_chars();
         }
     }
 }
@@ -64,103 +41,155 @@ impl CoreKernelApp for CoreUartTerminalApp {
 impl CoreUartTerminalApp {
     pub const fn new() -> Self {
         CoreUartTerminalApp {
-            command_start: 0,   // Iniciar el índice en 0
-            run_command: false, // No ejecutar ningún comando al principio
-
-            irq_data_idx: 0,
-            irq_data: [0; IRQ_DATA_SIZE],
+            run_command: false,
+            terminal_buffer_arrived_data: 0,
+            terminal_buffer_idx: 0,
+            terminal_buffer: [0u8; TERMINAL_BUFFER_SIZE],
         }
     }
 
+    /// Se invoca desde la interrupción del UART RX.
+    /// Se procesa la tecla de borrado de inmediato y se actualizan los índices.
     pub fn handle_mini_uart_rx_irq(&mut self, new_data: u8) {
-        // Si el dato recibido es un salto de línea (Enter)
+        // Si se recibe Enter, se marca para ejecutar el comando
         if new_data == b'\r' || new_data == b'\n' {
             self.run_command = true;
-
-            return; // Salir de la función una vez que se detecte un comando
+            return;
         } else {
-            self.irq_data[self.irq_data_idx] = new_data; //añadimos la data para gestionarse en el loop
-            self.irq_data_idx += 1;
-        }
+            if self.handle_clean_buffer(false) {
+                return;
+            }
 
-        // Si no se ha iniciado un comando, enviamos el dato recibido
-        if !self.run_command {
-            // Incrementamos el índice del buffer de comandos
-            self.command_start += 1;
+            // Si se presiona Backspace o Delete, se actualizan los índices y se envía la secuencia visual
+            if new_data == AsciiChar::Delete.to_byte() || new_data == AsciiChar::Backspace.to_byte()
+            {
+                if self.terminal_buffer_idx > 0 {
+                    self.terminal_buffer_idx -= 1;
+                    // Se asume que si se borró un byte, también se debe restar de los datos nuevos pendientes
+                    if self.terminal_buffer_arrived_data > 0 {
+                        self.terminal_buffer_arrived_data -= 1;
+                    }
+                    send_char(AsciiChar::Backspace.to_byte());
+                    send_char(AsciiChar::Space.to_byte());
+                    send_char(AsciiChar::Backspace.to_byte());
+                }
+                return;
+            }
+
+            // Inserta el byte recibido en la posición actual y actualiza los contadores
+            self.terminal_buffer[self.terminal_buffer_idx] = new_data;
+            self.terminal_buffer_idx += 1;
+            self.terminal_buffer_arrived_data += 1;
         }
     }
 
-    fn hanfle_clean_buffer(&mut self, force_clean: bool) -> bool {
-        if self.command_start >= MINI_UART_RX_BUFFER_SIZE || force_clean {
-            // Enviar secuencias para borrar el contenido del buffer
-            for _ in 0..self.command_start {
-                send_char(AsciiChar::Backspace.to_byte()); // Mover el cursor hacia atrás
-                send_char(AsciiChar::Space.to_byte()); // Sobrescribir con un espacio
-                send_char(AsciiChar::Backspace.to_byte()); // Volver a mover el cursor hacia atrás
+    /// Limpia el buffer si se llena o se solicita forzosamente.
+    /// Devuelve true si se limpió el buffer.
+    fn handle_clean_buffer(&mut self, force_clean: bool) -> bool {
+        if self.terminal_buffer_idx >= TERMINAL_BUFFER_SIZE || force_clean {
+            // Envía secuencia para borrar el contenido visual del buffer
+            for _ in 0..self.terminal_buffer_idx {
+                send_char(AsciiChar::Backspace.to_byte());
+                send_char(AsciiChar::Space.to_byte());
+                send_char(AsciiChar::Backspace.to_byte());
             }
 
-            // Enviar mensaje indicando que el buffer está lleno
             if !force_clean {
                 send_string("[Command Terminal] Buffer filled!\n\r");
             } else {
                 send_string("Buffer was cleaned!!\n\r");
             }
 
-            self.run_command = false;
-            self.command_start = 0;
-            self.irq_data_idx = 0;
-
-            return true; // Salir después de manejar el buffer lleno
+            self.clear_buffer();
+            return true;
         }
-        return false;
+        false
     }
 
-    /**
-     * LLamado desde el system loop si se ha establecido en las interrupciones que se ha intentado mandar un comando
-     */
+    /// Reinicia los contadores y el buffer
+    fn clear_buffer(&mut self) {
+        self.run_command = false;
+        self.terminal_buffer = [0u8; TERMINAL_BUFFER_SIZE];
+        self.terminal_buffer_idx = 0;
+        self.terminal_buffer_arrived_data = 0;
+    }
+
+    /// Ejecuta el comando recibido.
+    /// Se utiliza el slice correcto, de 0 hasta terminal_buffer_idx (sin sumar 1).
     fn run_command(&mut self) {
+        let command_bytes = &self.terminal_buffer[0..self.terminal_buffer_idx];
         let mut command_result: CommandResult = CommandResult::UnknownCommand;
 
-        let buffer: [u8; 1024] = KERNEL_APPS_MANAGER.lock(|m| {
-            let rx = m.core().uart().rx();
-            return rx.get_buffer().normalized(); //Normalizamos el buffer circular
-        });
-
-        let command_bytes =
-            &buffer[MINI_UART_RX_BUFFER_SIZE - self.command_start - 1..MINI_UART_RX_BUFFER_SIZE];
-
-        let command_len = command_bytes.len();
-
-        for idx in 0..command_len {
-            if command_bytes[idx] == AsciiChar::Space.to_byte() || idx + 1 == command_len {
-                // Se suma 1 por el espacio que se sabe que hay entre el comando y los params
-                command_result =
-                    Command::run_command(&command_bytes[..idx], &command_bytes[idx + 1..]);
-
-                break;
-            }
+        // Se intenta encontrar un espacio para separar comando y parámetros.
+        if let Some(space_idx) = command_bytes
+            .iter()
+            .position(|&b| b == AsciiChar::Space.to_byte())
+        {
+            // Se encontró un espacio: el comando es lo que está antes, y los parámetros lo que está después.
+            command_result =
+                Command::run_command(&command_bytes[..space_idx], &command_bytes[space_idx + 1..]);
+        } else {
+            // No se encontró espacio: se usa todo el buffer como comando.
+            command_result = Command::run_command(&command_bytes[..], &[]);
         }
 
-        // Result
+        // Se procesa el resultado del comando.
         match command_result {
-            CommandResult::Ok => {}
+            CommandResult::Ok => {
+                send_string("\n\r");
+            }
             CommandResult::Error(e) => {
                 send_string("[CommandError] ");
                 send_string(e);
+                send_string("\n\r");
             }
             CommandResult::UnknownCommand => {
-                send_string("Unknown command\n\r");
+                send_string("\n\rUnknown command\n\r");
             }
             CommandResult::InvalidBytes => {
-                send_string("Invalid bytes\n\r");
+                send_string("\n\rInvalid bytes\n\r");
             }
             CommandResult::CommandHandledResult => {}
         };
     }
 
-    fn throw_terminal_error(&self, error: u32) {
-        send_string("\n\rdefault terminal error\n\r");
+    /// Función auxiliar para enviar un u8 en formato decimal.
+    fn send_u8_decimal(mut value: u8) {
+        let mut buf = [0u8; 3];
+        let mut i = 0;
+
+        if value == 0 {
+            send_char(b'0');
+        } else {
+            while value > 0 && i < buf.len() {
+                buf[i] = (value % 10) + b'0';
+                value /= 10;
+                i += 1;
+            }
+            for j in (0..i).rev() {
+                send_char(buf[j]);
+            }
+        }
+        send_string("\n\r");
     }
 
-    fn handle_send_chars(&mut self, data: u8) {}
+    /// Procesa y envía los caracteres recién recibidos (el slice de nuevos datos).
+    fn handle_send_chars(&mut self) {
+        let start_index = self.terminal_buffer_idx - self.terminal_buffer_arrived_data;
+        let arrived_bytes = &self.terminal_buffer[start_index..self.terminal_buffer_idx];
+
+        for &byte in arrived_bytes.iter() {
+            // Aquí se pueden agregar más casos si se desean otros caracteres especiales
+            let is_letter: bool = matches!(byte, b'a'..=b'z' | b'A'..=b'Z');
+            if is_letter {
+                send_char(byte);
+            } else {
+                // Por ejemplo, se podría imprimir espacios u otros caracteres según se requiera
+                send_char(byte);
+            }
+        }
+
+        // Se reinicia el contador de bytes nuevos
+        self.terminal_buffer_arrived_data = 0;
+    }
 }
