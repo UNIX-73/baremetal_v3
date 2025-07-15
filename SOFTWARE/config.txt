@@ -1,0 +1,5 @@
+arm_64bit=1
+uart_2ndstage=0
+core_freq=250
+disable_uart=1
+

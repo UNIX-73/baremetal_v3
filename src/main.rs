@@ -48,7 +48,7 @@ extern "C" fn _start_rust() -> ! {
         m.core()
             .uart()
             .tx()
-            .b_send_string("\n\rHello from rust!\n\r");
+            .b_send_string("\n\rOS Started\n\rStarting terminal...\n\r[root] ");
 
         loop {
             m.handle_event_system_loop();

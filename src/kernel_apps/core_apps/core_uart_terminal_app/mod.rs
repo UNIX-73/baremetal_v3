@@ -1,6 +1,12 @@
 pub mod commands;
 use crate::{
-    kernel_apps::kernel_apps_manager::KERNEL_APPS_MANAGER, utils::string::ascii::AsciiChar,
+    kernel_apps::{
+        core_apps::core_uart_terminal_app::commands::{
+            send_string_terminal_formatted, send_terminal_user_string,
+        },
+        kernel_apps_manager::KERNEL_APPS_MANAGER,
+    },
+    utils::string::ascii::AsciiChar,
 };
 use commands::{Command, CommandResult};
 pub const TERMINAL_BUFFER_SIZE: usize = MINI_UART_RX_BUFFER_SIZE;
@@ -136,7 +142,7 @@ impl CoreUartTerminalApp {
         // Se procesa el resultado del comando.
         match command_result {
             CommandResult::Ok => {
-                send_string("\n\r");
+                send_terminal_user_string(true);
             }
             CommandResult::Error(e) => {
                 send_string("[CommandError] ");
@@ -144,10 +150,11 @@ impl CoreUartTerminalApp {
                 send_string("\n\r");
             }
             CommandResult::UnknownCommand => {
-                send_string("\n\rUnknown command\n\r");
+                send_string("\n\rUnknown command");
+                send_terminal_user_string(true);
             }
             CommandResult::InvalidBytes => {
-                send_string("\n\rInvalid bytes\n\r");
+                send_string_terminal_formatted("\n\rInvalid bytes\n\r");
             }
             CommandResult::CommandHandledResult => {}
         };

@@ -1,3 +1,5 @@
+use crate::kernel_apps::kernel_apps_manager::KERNEL_APPS_MANAGER;
+
 pub mod clear;
 pub mod test;
 pub struct CommandList;
@@ -44,3 +46,22 @@ pub static TERMINAL_COMMAND_LIST: &[Command] = &[
     Command("clear", CommandList::clear),
     Command("cls", CommandList::clear),
 ];
+
+#[inline]
+pub fn send_string_terminal_formatted(msg: &str) {
+    KERNEL_APPS_MANAGER.lock(|m| {
+        m.core().uart.tx().b_send_string(&"\n\r");
+        m.core().uart.tx().b_send_string(msg);
+        send_terminal_user_string(true);
+    })
+}
+
+#[inline]
+pub fn send_terminal_user_string(new_line: bool) {
+    KERNEL_APPS_MANAGER.lock(|m| {
+        if new_line {
+            m.core().uart.tx().b_send_string(&"\n\r");
+        }
+        m.core().uart.tx().b_send_string(&"[root] ");
+    })
+}

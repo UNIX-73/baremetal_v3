@@ -1,4 +1,7 @@
-use crate::kernel_apps::core_apps::core_uart_app::tx::global_send::send_string;
+use crate::kernel_apps::core_apps::{
+    core_uart_app::tx::global_send::send_string,
+    core_uart_terminal_app::commands::send_terminal_user_string,
+};
 
 use super::{CommandList, CommandResult};
 
@@ -15,7 +18,8 @@ impl CommandList {
         };
 
         send_string(clear_screen);
+        send_terminal_user_string(false);
 
-        return CommandResult::Ok;
+        return CommandResult::CommandHandledResult;
     }
 }
