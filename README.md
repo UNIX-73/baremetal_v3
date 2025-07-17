@@ -1,41 +1,54 @@
 # Bare-metal OS for Raspberry Pi Zero 2 W
 
-This is a minimal operating system developed from scratch for the Raspberry Pi Zero 2 W (ARMv8-A architecture), without relying on existing operating systems or any kind of emulation.
+This is a minimal operating system developed from scratch for the Raspberry Pi Zero 2 W (ARMv8-A architecture), without relying on any existing OS or emulation layers.
 
 ![UART terminal output](example.gif)
 
 ## Overview
 
-The goal of this project was to explore low-level programming on ARM hardware. It handles the boot process, basic GPIO control, and UART communication using memory-mapped I/O registers. Everything was tested directly on the device via a USB-to-UART connection.
+The goal of this project was to gain hands-on experience with low-level programming on ARM hardware. It covers the full boot process, GPIO control, and UART communication using memory-mapped I/O registers. All testing was done directly on hardware via USB-to-UART connection.
 
 ## Features
 
-- Bootloader written in ARM assembly
-- GPIO pin control
-- UART communication via PL011
+- Bootloader written in ARMv8 assembly
+- Direct control over GPIO pins
+- PL011 UART communication
 - UART receive interrupts
-- Basic interactive UART terminal (currently supports just a few demo commands: `test`, `test2`, `clear`/`cls`)
-- Fully tested on hardware (no QEMU or emulators)
-- Built in three iterations:
-  - [First version (C++/ASM)](https://github.com/UNIX-73/RASPBERRY_PI_ZERO_2_W_BAREMETAL)
-  - [Second version (C++/ASM)](https://github.com/UNIX-73/BAREMETAL_V2)
-  - Current version (Rust/ASM, rewritten from scratch with improvements)
+- Fully hardware-tested (no emulators, no QEMU)
+- Exception Level change to EL1
+- Developed over three iterations:
+  - [Version 1 – C++/Assembly](https://github.com/UNIX-73/RASPBERRY_PI_ZERO_2_W_BAREMETAL)
+  - [Version 2 – C++/Assembly](https://github.com/UNIX-73/BAREMETAL_V2)
+  - **Version 3 (this repo)** – Rust + Assembly rewrite with improved structure and terminal features
+
+## Interactive UART Terminal
+
+The system includes a simple UART terminal implemented entirely on the Raspberry Pi. It maintains an internal input buffer, handles backspace, and parses input commands character by character, everything processed by the Pi itself.
+
+### Supported commands:
+
+- `test [arg1 arg2 ...]` → Prints `ran test` and echoes any provided arguments.
+- `test2` → Prints `ran test2`. Takes no arguments.
+- `clear` / `cls` → Clears the screen.
+
+All output is sent over the UART connection and visible through a serial terminal (e.g., `minicom`).
 
 ## Toolchain and Environment
 
 - Cross-compilation: `aarch64-unknown-none`, `cargo`, `make`
-- Languages: Assembly, Rust, C++ (the previous iterations)
-- UART output via USB serial adapter
-- Target: Raspberry Pi Zero 2 W
+- Languages: Assembly (boot), Rust (kernel), C++ (previous versions)
+- UART via USB serial adapter
+- Target board: Raspberry Pi Zero 2 W
 
 ## How to Use
 
 1. Copy the contents of the `rpi_boot/` folder to the root of your Raspberry Pi SD card.
-2. Compile the kernel using `make` (or use the provided `kernel8.img` in the `binary/` folder).
-3. Place or replace the resulting kernel8.img in the SD card root (alongside the files from rpi_boot/).
-4. Connect the Pi to your computer via UART (minicom reccomended) and power it up. You’ll see output in the terminal.
+2. Compile the kernel using `make`, or use the prebuilt `kernel8.img` from the `binary/` folder.
+3. Place the `kernel8.img` in the root of the SD card.
+4. Connect the Pi to your computer via UART and power it up. The terminal will display boot logs and accept commands.
 
 ## Notes
 
-- This is an educational project and does not include features like MMU support, file systems, or HDMI output.
-- Documentation is still in progress. If you are reviewing this and need more technical details, feel free to contact me.
+- This project is educational and focused on learning system-level development.
+- It does not include features like MMU, multitasking, file systems, or HDMI support.
+- If you’re reviewing this and would like further technical insight, feel free to reach out.
